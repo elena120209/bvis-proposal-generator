@@ -1,4 +1,4 @@
-import base64, subprocess, tempfile, os, uuid
+import base64, subprocess, tempfile, os, uuid, re, unicodedata
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response, HTMLResponse
 from pydantic import BaseModel
@@ -87,7 +87,7 @@ def _file_response(fmt, event, committee, month, year, date, location,
                   activities, why, timeline, act1_name, act2_name,
                   act1_participate, act1_prizes, act2_participate, act2_prizes)
     pptx = filler.fill(data)
-    fname = (event or "proposal").replace(" ", "_")
+    fname = re.sub(r'[^A-Za-z0-9._-]+','_', unicodedata.normalize('NFKD',(event or 'proposal')).encode('ascii','ignore').decode('ascii')).strip('._-') or 'proposal'
     if fmt == "pptx":
         return Response(
             pptx,
