@@ -11,6 +11,19 @@ def _set(para, text):
     para.runs[0].text=text
     for r in para.runs[1:]: r.text=""
 
+def _add_line_after(shape, anchor_text, new_text):
+    """Append a paragraph right after the one whose text == anchor_text, reusing
+    that paragraph's formatting so the new line matches the template exactly."""
+    import copy
+    from pptx.text.text import _Paragraph
+    for para in shape.text_frame.paragraphs:
+        if "".join(r.text for r in para.runs) == anchor_text:
+            new_p = copy.deepcopy(para._p)
+            para._p.addnext(new_p)
+            _set(_Paragraph(new_p, para._parent), new_text)
+            return True
+    return False
+
 def _fill_list(shape, header_text, items):
     """After a paragraph == header_text, fill following non-empty placeholder lines with items."""
     if not items: return
@@ -41,6 +54,11 @@ def fill(data: dict, template_path=None) -> bytes:
     why=g("why",[]) or []
     allowed=g("allowed",[]) or []; notallowed=g("notallowed",[]) or []
     timeline=g("timeline",[]) or []
+    # Subtitle under the date on the cover: who this proposal belongs to.
+    leads=g("leads","")
+    if isinstance(leads,(list,tuple)): leads=", ".join(x for x in leads if x)
+    _bits=[b for b in (data.get("committee"), ("Leads: "+leads) if leads else None) if b]
+    subtitle="   ·   ".join(_bits)
 
     SIMPLE={
       'PROPOSAL2025 – 2026 ACADEMIC YEAR': f'PROPOSAL{year} ACADEMIC YEAR',
@@ -62,6 +80,7 @@ def fill(data: dict, template_path=None) -> bytes:
                 for para in sh.text_frame.paragraphs:
                     for r in para.runs:
                         if r.text.strip()=='EVENT NAME': r.text=event
+                if subtitle: _add_line_after(sh, month, subtitle)
             # overview lists (slide 2)
             if i==1:
                 _fill_list(sh,'Why?',why)
