@@ -45,13 +45,13 @@ def _split(s):
     return [x.strip() for x in parts if x.strip()]
 
 def _build(event="", committee="", month="", year="", date="", location="",
-           activities="", why="", timeline="",
+           activities="", why="", timeline="", leads="",
            act1_name="", act2_name="",
            act1_participate="", act1_prizes="",
            act2_participate="", act2_prizes=""):
     data = {
         "event": event or None, "committee": committee or None,
-        "month": month or None, "year": year or None,
+        "month": month or None, "year": year or None, "leads": leads or None,
         "date": date or None, "location": location or None,
         "act1_name": act1_name or None, "act2_name": act2_name or None,
         "activities": _split(activities), "why": _split(why), "timeline": _split(timeline),
@@ -80,14 +80,31 @@ def generate(p: Proposal):
 # These let a Power Apps button do Launch("<url>/pdf?event=...&committee=...")
 # with NO premium connector. Lists are passed pipe-delimited, e.g.
 #   activities=Pumpkin%20%26%20Pins|Snatch%20the%20Donut
+def _safe_filename(event):
+    """HTTP headers are latin-1 only. Event titles routinely contain em/en
+    dashes, curly quotes and Vietnamese diacritics, which raise
+    UnicodeEncodeError when Starlette encodes the Content-Disposition header.
+    Normalise to a plain ASCII slug, always non-empty."""
+    raw = (event or "proposal").strip()
+    # Map the punctuation people actually paste in before stripping accents.
+    for bad, good in (("\u2014", "-"), ("\u2013", "-"), ("\u2012", "-"),
+                      ("\u2018", "'"), ("\u2019", "'"),
+                      ("\u201c", '"'), ("\u201d", '"'), ("\u2026", "...")):
+        raw = raw.replace(bad, good)
+    ascii_only = (unicodedata.normalize("NFKD", raw)
+                  .encode("ascii", "ignore").decode("ascii"))
+    cleaned = re.sub(r'[^A-Za-z0-9._-]+', "_", ascii_only).strip("._-")
+    return (cleaned or "proposal")[:80]
+
 def _file_response(fmt, event, committee, month, year, date, location,
                    activities, why, timeline, act1_name, act2_name,
-                   act1_participate, act1_prizes, act2_participate, act2_prizes):
+                   act1_participate, act1_prizes, act2_participate, act2_prizes,
+                   leads=""):
     data = _build(event, committee, month, year, date, location,
-                  activities, why, timeline, act1_name, act2_name,
+                  activities, why, timeline, leads, act1_name, act2_name,
                   act1_participate, act1_prizes, act2_participate, act2_prizes)
     pptx = filler.fill(data)
-    fname = re.sub(r'[^A-Za-z0-9._-]+','_', unicodedata.normalize('NFKD',(event or 'proposal')).encode('ascii','ignore').decode('ascii')).strip('._-') or 'proposal'
+    fname = _safe_filename(event)
     if fmt == "pptx":
         return Response(
             pptx,
@@ -103,17 +120,19 @@ def pdf_get(event: str="", committee: str="", month: str="", year: str="",
             date: str="", location: str="", activities: str="", why: str="",
             timeline: str="", act1_name: str="", act2_name: str="",
             act1_participate: str="", act1_prizes: str="",
-            act2_participate: str="", act2_prizes: str=""):
+            act2_participate: str="", act2_prizes: str="", leads: str=""):
     return _file_response("pdf", event, committee, month, year, date, location,
                           activities, why, timeline, act1_name, act2_name,
-                          act1_participate, act1_prizes, act2_participate, act2_prizes)
+                          act1_participate, act1_prizes, act2_participate, act2_prizes,
+                          leads)
 
 @app.get("/pptx")
 def pptx_get(event: str="", committee: str="", month: str="", year: str="",
              date: str="", location: str="", activities: str="", why: str="",
              timeline: str="", act1_name: str="", act2_name: str="",
              act1_participate: str="", act1_prizes: str="",
-             act2_participate: str="", act2_prizes: str=""):
+             act2_participate: str="", act2_prizes: str="", leads: str=""):
     return _file_response("pptx", event, committee, month, year, date, location,
                           activities, why, timeline, act1_name, act2_name,
-                          act1_participate, act1_prizes, act2_participate, act2_prizes)
+                          act1_participate, act1_prizes, act2_participate, act2_prizes,
+                          leads)
